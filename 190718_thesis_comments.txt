@@ -1,0 +1,3 @@
+# Still to do
+- fix table of contents
+- fix indentations in chapter 4
