@@ -33,6 +33,23 @@ Ideally we organize the information so it can be streamed into primer3
 """
 
 import subprocess
+import copy
+
+class Primer(object):
+
+    def __init__(self, side, pen, seq, start, length, tm, gc, anyTH, endTH, hairpin, stab):
+        self.side = side
+        self.pen = pen
+        self.seq = seq
+        self.start = start
+        self.length = length
+        self.tm = tm
+        self.gc = gc
+        self.anyTH = anyTH
+        self.endTH = endTH
+        self.hairpin = hairpin
+        self.stab = stab
+
 
 def bash(command):
     """Makes running shell commands less verbose"""
@@ -92,6 +109,34 @@ def find_match(seq1, seq2):
             if seq1[idx:idx+len2] == seq2:
                 return (idx, idx+len2)
 
+def parse_primers(primer3out, side):
+    primers = {}
+    primer3out = primer3out.split('\n')
+    count = 0
+    for line in primer3out:
+        if ("PRIMER_" + side.upper() + "_" + str(count)) in line:
+            if "_PENALTY" in line:
+                pen = line.split('=')[1]
+            if "_SEQUENCE" in line:
+                seq = line.split('=')[1]
+            if "," in line:
+                start = line.split('=')[1].split(',')[0]
+                length = line.split('=')[1].split(',')[1]
+            if "GC_PERCENT" in line:
+                gc = line.split('=')
+            if "TM" in line: 
+                tm = line.split('=')[1]
+            if "SELF_ANY" in line:
+                anyTH = line.split('=')[1]
+            if "SELF_END" in line:
+                endTH = line.split('=')[1]
+            if "HAIRPIN" in line:
+                hairpin = line.split('=')[1]
+            if "END_STABILITY" in line:
+                stab = line.split('=')[1]
+                primers[str(count)+'_'+side] = Primer(side, pen, seq, start, length, tm, gc, anyTH, endTH, hairpin, stab)
+                count += 1
+    return primers
 
 def pick_primers(template, side, lowTm=60, highTm=65):
     """
@@ -121,14 +166,16 @@ def pick_primers(template, side, lowTm=60, highTm=65):
     primer3_settings = 'SEQUENCE_ID=' + sequence_id + '\n' + 'SEQUENCE_TEMPLATE=' + sequence_template + '\n' + 'PRIMER_TASK=' + task + '\n' + 'PRIMER_PICK_LEFT_PRIMER=' + pick_left_primer + '\n' + 'PRIMER_PICK_INTERNAL_OLIGO=' + pick_internal_oligo + '\n' + 'PRIMER_PICK_RIGHT_PRIMER=' + pick_right_primer + '\n' + 'PRIMER_OPT_SIZE=' + opt_size + '\n' + 'PRIMER_MIN_SIZE=' + min_size + '\n' + 'PRIMER_MAX_SIZE=' + max_size + '\n' + 'PRIMER_PRODUCT_SIZE_RANGE=' + product_size_range + '\n' + 'PRIMER_EXPLAIN_FLAG=' + explain_flag + '\n='
 
     # test for primer3
-    print(run_primer3(primer3_settings))
+    return parse_primers(run_primer3(primer3_settings), side)
 
+def sort_primers(cr):
+    print(cr['primer3outRight'])
 
 # going to need a regex statement to find the primers, since they are PRIMER_SIDE_X, where X is a number. 
 
 
 # gather the sample and crispr targets
-fasta = read_fasta('multi_primer3/examples/SCGN/SCGN.fasta')
+fasta = read_fasta('checkprimer/examples/SCGN/SCGN.fasta')
 crisprs = {}
 for entry in fasta:
     if len(fasta[entry]) < 25 and len(fasta[entry]) > 20:
@@ -145,14 +192,32 @@ for cr in crisprs:
 
 # pick left primers
 for cr in crisprs:
+    
+    crisprs[cr]['primers'] = {}
+    
     # first if there is pleantly of room
     if (crisprs[cr]['start'] - 400) > 0:
         template = seq[crisprs[cr]['start']-400:crisprs[cr]['start']-100]
-        pick_primers(template, 'left')
+        temp = pick_primers(template, 'left')
+        for primer in temp:
+            crisprs[cr]['primers'][primer] = copy.deepcopy(temp[primer])
+
 
 # pick right primers
 for cr in crisprs:
     # first if there is pleantly of room
     if (crisprs[cr]['stop'] + 400) < len(seq):
         template = seq[crisprs[cr]['stop']+100:crisprs[cr]['stop']+400]
-        pick_primers(template, 'right')
+        temp = pick_primers(template, 'right')
+        for primer in temp:
+            crisprs[cr]['primers'][primer] = copy.deepcopy(temp[primer])
+
+print(crisprs)
+
+
+
+# pick right primers
+# for cr in crisprs:
+#     # first if there is pleantly of room
+#     crisprs[cr]['primers'] = sort_primers(crisprs[cr])
+#     break
