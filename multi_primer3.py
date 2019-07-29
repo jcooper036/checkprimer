@@ -49,6 +49,10 @@ class Primer(object):
         self.endTH = endTH
         self.hairpin = hairpin
         self.stab = stab
+    
+    def output(self):
+        out = "{},{},{},{},{}".format(self.seq, self.side, self.start, self.tm, self.gc)
+        return out
 
 
 def bash(command):
@@ -120,10 +124,10 @@ def parse_primers(primer3out, side):
             if "_SEQUENCE" in line:
                 seq = line.split('=')[1]
             if "," in line:
-                start = line.split('=')[1].split(',')[0]
+                start = int(line.split('=')[1].split(',')[0])
                 length = line.split('=')[1].split(',')[1]
             if "GC_PERCENT" in line:
-                gc = line.split('=')
+                gc = line.split('=')[1]
             if "TM" in line: 
                 tm = line.split('=')[1]
             if "SELF_ANY" in line:
@@ -134,8 +138,18 @@ def parse_primers(primer3out, side):
                 hairpin = line.split('=')[1]
             if "END_STABILITY" in line:
                 stab = line.split('=')[1]
-                primers[str(count)+'_'+side] = Primer(side, pen, seq, start, length, tm, gc, anyTH, endTH, hairpin, stab)
-                count += 1
+                
+                # only save if the primer is more than 10bp away from all others in starting position
+                add = True
+                if primers:
+                    starts = [int(primers[pr].start) for pr in primers]
+                    if not all( (start > x+10) for x in starts) and not all( (start < x-10) for x in starts):
+                        add = False
+                if add:
+                    primers[str(count)+'_'+side] = Primer(side, pen, seq, start, length, tm, gc, anyTH, endTH, hairpin, stab)
+                    count += 1
+        if count == 2:
+            return primers
     return primers
 
 def pick_primers(template, side, lowTm=60, highTm=65):
@@ -163,25 +177,38 @@ def pick_primers(template, side, lowTm=60, highTm=65):
     explain_flag = '1'
 
     # string concat for settings
-    primer3_settings = 'SEQUENCE_ID=' + sequence_id + '\n' + 'SEQUENCE_TEMPLATE=' + sequence_template + '\n' + 'PRIMER_TASK=' + task + '\n' + 'PRIMER_PICK_LEFT_PRIMER=' + pick_left_primer + '\n' + 'PRIMER_PICK_INTERNAL_OLIGO=' + pick_internal_oligo + '\n' + 'PRIMER_PICK_RIGHT_PRIMER=' + pick_right_primer + '\n' + 'PRIMER_OPT_SIZE=' + opt_size + '\n' + 'PRIMER_MIN_SIZE=' + min_size + '\n' + 'PRIMER_MAX_SIZE=' + max_size + '\n' + 'PRIMER_PRODUCT_SIZE_RANGE=' + product_size_range + '\n' + 'PRIMER_EXPLAIN_FLAG=' + explain_flag + '\n='
+    primer3_settings = 'SEQUENCE_ID=' + sequence_id + '\n' + 'SEQUENCE_TEMPLATE=' + sequence_template + '\n' + 'PRIMER_TASK=' + task + '\n' + 'PRIMER_PICK_LEFT_PRIMER=' + pick_left_primer + '\n' + 'PRIMER_PICK_INTERNAL_OLIGO=' + pick_internal_oligo + '\n' + 'PRIMER_PICK_RIGHT_PRIMER=' + pick_right_primer + '\n' + 'PRIMER_OPT_SIZE=' + opt_size + '\n' + 'PRIMER_MIN_SIZE=' + min_size + '\n' + 'PRIMER_MAX_SIZE=' + max_size + '\n' + 'PRIMER_PRODUCT_SIZE_RANGE=' + product_size_range + '\n' + 'PRIMER_EXPLAIN_FLAG=' + explain_flag + '\n' + 'PRIMER_INTERNAL_MIN_TM=58'+ '\n' + 'PRIMER_INTERNAL_OPT_TM=60' + '\n' + 'PRIMER_INTERNAL_MAX_TM=63' + '\n='
 
     # test for primer3
     return parse_primers(run_primer3(primer3_settings), side)
 
-def sort_primers(cr):
-    print(cr['primer3outRight'])
+def output_primers(crisprs):
+    """
+    Input: CRISPR dictionary (with the primers dictionaries inside it)
+    Writes to a csv in the current directory
+    """
+    with open("multi_primer_out.csv", 'w') as f:
+        f.write('GENE,CRISPR,PRIMER,SEQUENCE,SIDE,START,TM,GC%\n')
+        for cr in crisprs:
+            for pr in crisprs[cr]['primers']:
+                outstring = crisprs[cr]['primers'][pr].output()
+                f.write("{},{},{},{}\n".format(crisprs[cr]['gene'], cr, pr, outstring))
+
+
 
 # going to need a regex statement to find the primers, since they are PRIMER_SIDE_X, where X is a number. 
 
 
 # gather the sample and crispr targets
-fasta = read_fasta('checkprimer/examples/SCGN/SCGN.fasta')
+gene = 'SCGN'
+fasta = read_fasta('checkprimer/examples/{}/{}.fasta'.format(gene, gene))
 crisprs = {}
 for entry in fasta:
     if len(fasta[entry]) < 25 and len(fasta[entry]) > 20:
         crisprs[entry] = {
             'seq' : fasta[entry],
-            'name' : entry
+            'name' : entry,
+            'gene' : gene,
         }
     else:
         seq = fasta[entry]
@@ -212,9 +239,15 @@ for cr in crisprs:
         for primer in temp:
             crisprs[cr]['primers'][primer] = copy.deepcopy(temp[primer])
 
-print(crisprs)
+for cr in crisprs:
+    for primer in crisprs[cr]['primers']:
+        name = primer
+        seq = crisprs[cr]['primers'][primer].seq
+        start = crisprs[cr]['primers'][primer].start
+        print(name, seq, start)
+    print('\n')
 
-
+output_primers(crisprs)
 
 # pick right primers
 # for cr in crisprs:
