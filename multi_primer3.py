@@ -33,7 +33,12 @@ Ideally we organize the information so it can be streamed into primer3
 """
 
 import subprocess
+import sys
 import copy
+
+#########################
+##### Classes
+#########################
 
 class Primer(object):
 
@@ -54,6 +59,9 @@ class Primer(object):
         out = "{},{},{},{},{}".format(self.seq, self.side, self.start, self.tm, self.gc)
         return out
 
+#########################
+##### Functions
+#########################
 
 def bash(command):
     """Makes running shell commands less verbose"""
@@ -182,12 +190,13 @@ def pick_primers(template, side, lowTm=60, highTm=65):
     # test for primer3
     return parse_primers(run_primer3(primer3_settings), side)
 
-def output_primers(crisprs):
+def output_primers(crisprs, gene):
     """
     Input: CRISPR dictionary (with the primers dictionaries inside it)
     Writes to a csv in the current directory
     """
-    with open("multi_primer_out.csv", 'w') as f:
+    outfile = gene + "_multi_primer_out.csv"
+    with open(outfile, 'w') as f:
         f.write('GENE,CRISPR,PRIMER,SEQUENCE,SIDE,START,TM,GC%\n')
         for cr in crisprs:
             for pr in crisprs[cr]['primers']:
@@ -195,13 +204,14 @@ def output_primers(crisprs):
                 f.write("{},{},{},{}\n".format(crisprs[cr]['gene'], cr, pr, outstring))
 
 
-
-# going to need a regex statement to find the primers, since they are PRIMER_SIDE_X, where X is a number. 
-
+#########################
+##### Run commands
+#########################
 
 # gather the sample and crispr targets
-gene = 'SCGN'
-fasta = read_fasta('checkprimer/examples/{}/{}.fasta'.format(gene, gene))
+infile = sys.argv[1]
+gene = infile.split('/')[-1].split('.fasta')[0]
+fasta = read_fasta(infile)
 crisprs = {}
 for entry in fasta:
     if len(fasta[entry]) < 25 and len(fasta[entry]) > 20:
@@ -209,48 +219,44 @@ for entry in fasta:
             'seq' : fasta[entry],
             'name' : entry,
             'gene' : gene,
+            'primers' : {},
         }
     else:
         seq = fasta[entry]
 
-# find the start and end position of each CRISPR in the sequences
+# loop over each CRISPR molecule
 for cr in crisprs:
+
+    # find the start and stop positions
     crisprs[cr]['start'], crisprs[cr]['stop'] = find_match(seq, crisprs[cr]['seq'])
 
-# pick left primers
-for cr in crisprs:
-    
-    crisprs[cr]['primers'] = {}
-    
+    # left primers
     # first if there is pleantly of room
     if (crisprs[cr]['start'] - 400) > 0:
-        template = seq[crisprs[cr]['start']-400:crisprs[cr]['start']-100]
+        
+        # template is -400 - -50 from crispr start site
+        template = seq[crisprs[cr]['start']-400:crisprs[cr]['start']-50]
         temp = pick_primers(template, 'left')
         for primer in temp:
             crisprs[cr]['primers'][primer] = copy.deepcopy(temp[primer])
 
-
-# pick right primers
-for cr in crisprs:
+    # right primers
     # first if there is pleantly of room
     if (crisprs[cr]['stop'] + 400) < len(seq):
-        template = seq[crisprs[cr]['stop']+100:crisprs[cr]['stop']+400]
+        
+         # template is +50 to +400 from crispr start site
+        template = seq[crisprs[cr]['stop']+50:crisprs[cr]['stop']+400]
         temp = pick_primers(template, 'right')
         for primer in temp:
             crisprs[cr]['primers'][primer] = copy.deepcopy(temp[primer])
-
-for cr in crisprs:
+    
+    
     for primer in crisprs[cr]['primers']:
         name = primer
-        seq = crisprs[cr]['primers'][primer].seq
+        primer_seq = crisprs[cr]['primers'][primer].seq
         start = crisprs[cr]['primers'][primer].start
-        print(name, seq, start)
+        print(name, primer_seq, start)
     print('\n')
 
-output_primers(crisprs)
-
-# pick right primers
-# for cr in crisprs:
-#     # first if there is pleantly of room
-#     crisprs[cr]['primers'] = sort_primers(crisprs[cr])
-#     break
+# output the seqeunces to a csv in the current directory
+output_primers(crisprs, gene)
