@@ -4,32 +4,79 @@ Input: A folder that contains multiple csvs
 Output: One csv that are all of them together
 """
 
+import glob
+import sys
+import datetime
 
-def read_csv(infile):
-    csvList = []
-    with open(infile, 'r') as f:
-        for line in f:
-            line = line.rstrip()
-            csvList.append(line)
-    return csvList
 
-def append_csv(csvList, outfile):
-    with open(outfile, 'w+') as f:
-        for line in csvList:
-            f.write(line + '\n')
+class Csv(object):
+
+    def __init__(self, file, header=True):
+        self.file = file
+        self.header = header
+        self.read_csv(self.header)
+    
+    def read_csv(self, header):
+        """
+        Input: csv file, header bool (optional)
+        Gives the object the .data property
+        """
+        self.data = []
+        with open(self.file, 'r') as f:
+            for line in f:
+                line = line.rstrip()
+                if header:
+                    self.header = line.split(',')
+                if not header:
+                    line = line.split(',')
+                    self.data.append(line)
+                header = False
+
+def write_csv(csvlist, file, header=False):
+    with open(file, 'w') as f:
+        if header:
+            f.write(','.join(header))
+            f.write('\n')
+        for ele in csvlist:
+            f.write(','.join(ele))
+            f.write('\n')
+
+def combine_csvs(csvs):
+    """
+    """
+    gotHeader = False
+    master_list = []
+
+    for csv in csvs:
+        if not gotHeader:
+            master_list.append(csvs[csv].header)
+            gotHeader = True
+        for ele in csvs[csv].data:
+            master_list.append(ele)
+    return master_list
+
+def write_csv(csvlist, file, header=False):
+    with open(file, 'w') as f:
+        if header:
+            f.write(','.join(header))
+            f.write('\n')
+        for ele in csvlist:
+            if ele:
+                f.write(','.join(ele))
+                f.write('\n')
+
+# ID the folder
+folder = sys.argv[1]
 
 # use glob to find everything ending in .csv
-csvs = []
+csvs = {}
+for csvFile in glob.glob(folder + "*/*_autoprimer_output.csv"):
+    csvs[csvFile] = Csv(csvFile)
 
-# one by one, write them to a new csv. Do this s.t. only one csv is in memory at any given point
+# get the contents of all those csvs together
+output = combine_csvs(csvs)
 
-# write a blank new line to the master csv
-master_csv = ''
-with open(master_csv, 'w') as f:
-    f.write('')
-
-# loop over the csvs
-for infile in csvs:
-    csvList = read_csv(infile)
-    append_csv(csvList, master_csv)
-
+# write teh output
+now = datetime.datetime.now()
+file = '/Volumes/i_bio/Crispr_F0_Screens/0-Genes for design/Genes_for_autoprimer/autoprimer_combine_' + now.strftime("%Y-%m-%d.%H-%M") + '.csv'
+write_csv(output, file)

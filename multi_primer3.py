@@ -163,7 +163,7 @@ def blast_primer(seq):
     Input: primer sequence
     Returns True if primer is unique, false if the primer is not.
     """
-    genome = 'genome/GRCh38_latest_genomic.fasta'
+    genome = '/Volumes/i_bio/Crispr_F0_Screens/checkprimer/genome/GRCh38_latest_genomic.fasta'
     if not os.path.exists(genome + '.nhr'):
         print("UPDATE: making BLAST database for " + genome)
         command = 'makeblastdb -in ' + genome + ' -parse_seqids -dbtype nucl'
@@ -222,7 +222,7 @@ def parse_primers(primer3out, side):
                         FR = 'F'
                     if side == 'right':
                         FR = 'R'
-                    primers[str(count)+'_'+FR] = Primer(side, pen, seq, start, length, tm, gc, anyTH, endTH, hairpin, stab)
+                    primers[FR+str(count)] = Primer(side, pen, seq, start, length, tm, gc, anyTH, endTH, hairpin, stab)
                     count += 1
         if count == 4:
             return primers
@@ -264,18 +264,18 @@ def pick_primers(template, side, lowTm=60, highTm=65):
     # test for primer3
     return parse_primers(run_primer3(primer3_settings), side)
 
-def output_primers(crisprs, gene):
+def output_primers(crisprs, gene, file):
     """
     Input: CRISPR dictionary (with the primers dictionaries inside it)
     Writes to a csv in the current directory
     """
-    outfile = gene + '/' + gene + "_multi_primer_out.csv"
-    with open(outfile, 'w') as f:
+    with open(file, 'w') as f:
         f.write('GENE,CRISPR,PRIMER,SEQUENCE,SIDE,START,TM,GC%\n')
         for cr in crisprs:
             for pr in crisprs[cr]['primers']:
                 outstring = crisprs[cr]['primers'][pr].output()
-                f.write("{},{},{},{}\n".format(crisprs[cr]['gene'], cr, pr, outstring))
+                primerName = crisprs[cr]['primerTag'] + '_' + pr
+                f.write("{},{},{},{}\n".format(crisprs[cr]['gene'], cr, primerName, outstring))
 
 
 #########################
@@ -353,4 +353,5 @@ for cr in crisprs:
     print('\n')
 
 # output the seqeunces to a csv in the current directory
-output_primers(crisprs, gene)
+file = infile.split('.fasta')[0] + "_autoprimer_output.csv"
+output_primers(crisprs, gene, file)
