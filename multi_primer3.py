@@ -35,6 +35,7 @@ Ideally we organize the information so it can be streamed into primer3
 import subprocess
 import sys
 import copy
+import os
 
 #########################
 ##### Classes
@@ -65,7 +66,8 @@ class Primer(object):
 
 def bash(command):
     """Makes running shell commands less verbose"""
-    return subprocess.check_output(command, shell=True, universal_newlines=True)
+    return subprocess.check_output(command, shell=True, executable='/bin/bash', universal_newlines=True)
+    # return subprocess.check_output(command, shell=True, executable='/bin/bash', universal_newlines=True).decode('utf-8').strip()
 
 def run_primer3(primer3_settings):
     """Appends the necessary quotes to the primer3 settings, runs primer3, returns the shell output"""
@@ -107,19 +109,79 @@ def read_fasta(file):
             # otherwize keep adding to the entry
             else:
                 entry += line
+    
+        # add in the final entry
+        if head and entry:
+            fasta[head] = entry
+
     return fasta
+
+def reverse_complement(sequence):
+    """Reverse complement a DNA string"""
+    rc_seq = ''
+    rcDict = {
+        'A' : 'T',
+        'T' : 'A',
+        'C' : 'G',
+        'G' : 'C'
+    }
+    for let in sequence:
+        rc_seq += rcDict[let.upper()]
+    rc_seq = rc_seq[::-1]
+    return rc_seq
 
 def find_match(seq1, seq2):
     """
     Input: sequence 1 (primary sequence) and sequence 2 (the search)
     Returns: The start and end position of seq2 in seq1
     """
-    
+
+    found = False
     len2 = len(seq2)
+
+    # try the sequence forward
     for idx, site in enumerate(seq1):
         if len(seq1) >= idx+len2:
             if seq1[idx:idx+len2] == seq2:
-                return (idx, idx+len2)
+                found = True
+                break
+    if found:
+        return (idx, idx+len2)
+    
+    # try the reverse complement
+    seq2 = reverse_complement(seq2)
+    for idx, site in enumerate(seq1):
+        if len(seq1) >= idx+len2:
+            if seq1[idx:idx+len2] == seq2:
+                found = True
+                break
+    if found:
+        return (idx, idx+len2)
+
+def blast_primer(seq):
+    """
+    Input: primer sequence
+    Returns True if primer is unique, false if the primer is not.
+    """
+    genome = 'genome/GRCh38_latest_genomic.fasta'
+    if not os.path.exists(genome + '.nhr'):
+        print("UPDATE: making BLAST database for " + genome)
+        command = 'makeblastdb -in ' + genome + ' -parse_seqids -dbtype nucl'
+        bash(command)
+    command = 'blastn -task blastn-short -outfmt "6" -query <(echo ' + seq + ') -db ' + genome
+    out = str(bash(command)).split('\n')
+    # see if there are hits greater than bit score of 34.2 (its the last entry in outfmt 6)
+    examine = []
+    for output in out:
+        output = output.split('\t')
+        if output[-1]:
+            if float(output[-1]) > 34.2:
+                examine.append(output)
+    if len(examine) == 1:
+        return True
+    else:
+        return False
+
 
 def parse_primers(primer3out, side):
     primers = {}
@@ -151,12 +213,18 @@ def parse_primers(primer3out, side):
                 add = True
                 if primers:
                     starts = [int(primers[pr].start) for pr in primers]
-                    if not all( (start > x+10) for x in starts) and not all( (start < x-10) for x in starts):
+                    if not all( (start > x+25) for x in starts) and not all( (start < x-25) for x in starts):
                         add = False
+                if not blast_primer(seq):
+                    add = False
                 if add:
-                    primers[str(count)+'_'+side] = Primer(side, pen, seq, start, length, tm, gc, anyTH, endTH, hairpin, stab)
+                    if side == 'left':
+                        FR = 'F'
+                    if side == 'right':
+                        FR = 'R'
+                    primers[str(count)+'_'+FR] = Primer(side, pen, seq, start, length, tm, gc, anyTH, endTH, hairpin, stab)
                     count += 1
-        if count == 2:
+        if count == 4:
             return primers
     return primers
 
@@ -179,13 +247,19 @@ def pick_primers(template, side, lowTm=60, highTm=65):
     
     pick_internal_oligo = '0'
     opt_size = '20'
-    min_size = '18'
-    max_size = '22'
+    min_size = '19'
+    max_size = '25'
     product_size_range = '75-150'
     explain_flag = '1'
+    min_gc = '35'
+    max_gc = '75'
+    min_tm = '59'
+    opt_tm = '60'
+    max_tm = '63'
+    primer_return_num = '15'
 
     # string concat for settings
-    primer3_settings = 'SEQUENCE_ID=' + sequence_id + '\n' + 'SEQUENCE_TEMPLATE=' + sequence_template + '\n' + 'PRIMER_TASK=' + task + '\n' + 'PRIMER_PICK_LEFT_PRIMER=' + pick_left_primer + '\n' + 'PRIMER_PICK_INTERNAL_OLIGO=' + pick_internal_oligo + '\n' + 'PRIMER_PICK_RIGHT_PRIMER=' + pick_right_primer + '\n' + 'PRIMER_OPT_SIZE=' + opt_size + '\n' + 'PRIMER_MIN_SIZE=' + min_size + '\n' + 'PRIMER_MAX_SIZE=' + max_size + '\n' + 'PRIMER_PRODUCT_SIZE_RANGE=' + product_size_range + '\n' + 'PRIMER_EXPLAIN_FLAG=' + explain_flag + '\n' + 'PRIMER_INTERNAL_MIN_TM=58'+ '\n' + 'PRIMER_INTERNAL_OPT_TM=60' + '\n' + 'PRIMER_INTERNAL_MAX_TM=63' + '\n='
+    primer3_settings = 'SEQUENCE_ID=' + sequence_id + '\n' + 'SEQUENCE_TEMPLATE=' + sequence_template + '\n' + 'PRIMER_TASK=' + task + '\n' + 'PRIMER_PICK_LEFT_PRIMER=' + pick_left_primer + '\n' + 'PRIMER_PICK_INTERNAL_OLIGO=' + pick_internal_oligo + '\n' + 'PRIMER_PICK_RIGHT_PRIMER=' + pick_right_primer + '\n' + 'PRIMER_OPT_SIZE=' + opt_size + '\n' + 'PRIMER_MIN_SIZE=' + min_size + '\n' + 'PRIMER_MAX_SIZE=' + max_size + '\n' + 'PRIMER_PRODUCT_SIZE_RANGE=' + product_size_range + '\n' + 'PRIMER_EXPLAIN_FLAG=' + explain_flag + '\n' + 'PRIMER_INTERNAL_MIN_TM=' + min_tm + '\n' + 'PRIMER_INTERNAL_OPT_TM=' + opt_tm + '\n' + 'PRIMER_INTERNAL_MAX_TM=' + max_tm + '\n' + 'PRIMER_INTER_MIN_GC=' + min_gc + '\n' + 'PRIMER_INTERNAL_MAX_GC=' + max_gc + '\n' + 'PRIMER_NUM_RETURN=' + primer_return_num + '\n='
 
     # test for primer3
     return parse_primers(run_primer3(primer3_settings), side)
@@ -195,7 +269,7 @@ def output_primers(crisprs, gene):
     Input: CRISPR dictionary (with the primers dictionaries inside it)
     Writes to a csv in the current directory
     """
-    outfile = gene + "_multi_primer_out.csv"
+    outfile = gene + '/' + gene + "_multi_primer_out.csv"
     with open(outfile, 'w') as f:
         f.write('GENE,CRISPR,PRIMER,SEQUENCE,SIDE,START,TM,GC%\n')
         for cr in crisprs:
@@ -214,13 +288,23 @@ gene = infile.split('/')[-1].split('.fasta')[0]
 fasta = read_fasta(infile)
 crisprs = {}
 for entry in fasta:
-    if len(fasta[entry]) < 25 and len(fasta[entry]) > 20:
-        crisprs[entry] = {
-            'seq' : fasta[entry],
-            'name' : entry,
+    if 'crispr' in entry:
+        crseq = fasta[entry]
+        entry = entry.split(' ')
+        for info in entry:
+            if 'crispr' in info:
+                name = info.split(':')[1]
+            if 'segment' in info:
+                exon = info.split(':')[1]
+        crisprs[name] = {
+            'seq' : crseq,
+            'name' : name,
+            'segment' : exon,
             'gene' : gene,
             'primers' : {},
         }
+        crisprs[name]['primerTag'] = '{}_{}_{}'.format(crisprs[name]['gene'], crisprs[name]['segment'], crisprs[name]['name'])
+
     else:
         seq = fasta[entry]
 
@@ -230,27 +314,37 @@ for cr in crisprs:
     # find the start and stop positions
     crisprs[cr]['start'], crisprs[cr]['stop'] = find_match(seq, crisprs[cr]['seq'])
 
+    # find all the possible primers
+
     # left primers
     # first if there is pleantly of room
-    if (crisprs[cr]['start'] - 400) > 0:
+    if (crisprs[cr]['start'] - 600) > 0:
         
         # template is -400 - -50 from crispr start site
-        template = seq[crisprs[cr]['start']-400:crisprs[cr]['start']-50]
+        template = seq[crisprs[cr]['start']-600:crisprs[cr]['start']-125]
         temp = pick_primers(template, 'left')
         for primer in temp:
+            temp[primer].start = crisprs[cr]['start'] - 125 - temp[primer].start
             crisprs[cr]['primers'][primer] = copy.deepcopy(temp[primer])
 
     # right primers
     # first if there is pleantly of room
-    if (crisprs[cr]['stop'] + 400) < len(seq):
+    if (crisprs[cr]['stop'] + 600) < len(seq):
         
          # template is +50 to +400 from crispr start site
-        template = seq[crisprs[cr]['stop']+50:crisprs[cr]['stop']+400]
+        template = seq[crisprs[cr]['stop']+125:crisprs[cr]['stop']+600]
         temp = pick_primers(template, 'right')
         for primer in temp:
+            temp[primer].start = crisprs[cr]['stop'] + 125 + temp[primer].start
             crisprs[cr]['primers'][primer] = copy.deepcopy(temp[primer])
     
-    
+    # find the distances between all pairwise combinations of primers
+
+    # name the primers correctly
+
+
+    # write to the terminal
+    print(crisprs[cr]['name'])
     for primer in crisprs[cr]['primers']:
         name = primer
         primer_seq = crisprs[cr]['primers'][primer].seq
