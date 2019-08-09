@@ -78,5 +78,5 @@ output = combine_csvs(csvs)
 
 # write teh output
 now = datetime.datetime.now()
-file = '/Volumes/i_bio/Crispr_F0_Screens/0-Genes for design/Genes_for_autoprimer/autoprimer_combine_' + now.strftime("%Y-%m-%d.%H-%M") + '.csv'
+file = '/Volumes/i_bio/Crispr_F0_Screens/0-Genes_for_design/Genes_for_autoprimer/autoprimer_combine_' + now.strftime("%Y-%m-%d.%H-%M") + '.csv'
 write_csv(output, file)

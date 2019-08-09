@@ -318,24 +318,26 @@ for cr in crisprs:
 
     # left primers
     # first if there is pleantly of room
-    if (crisprs[cr]['start'] - 600) > 0:
+    end_buffer = 600
+    inside_buffer = 125
+    if (crisprs[cr]['start'] - end_buffer) > 0:
         
         # template is -400 - -50 from crispr start site
-        template = seq[crisprs[cr]['start']-600:crisprs[cr]['start']-125]
+        template = seq[crisprs[cr]['start']-end_buffer:crisprs[cr]['start']-inside_buffer]
         temp = pick_primers(template, 'left')
         for primer in temp:
-            temp[primer].start = crisprs[cr]['start'] - 125 - temp[primer].start
+            temp[primer].start = crisprs[cr]['start'] - inside_buffer - temp[primer].start
             crisprs[cr]['primers'][primer] = copy.deepcopy(temp[primer])
 
     # right primers
     # first if there is pleantly of room
-    if (crisprs[cr]['stop'] + 600) < len(seq):
+    if (crisprs[cr]['stop'] + end_buffer) < len(seq):
         
          # template is +50 to +400 from crispr start site
-        template = seq[crisprs[cr]['stop']+125:crisprs[cr]['stop']+600]
+        template = seq[crisprs[cr]['stop']+inside_buffer:crisprs[cr]['stop']+end_buffer]
         temp = pick_primers(template, 'right')
         for primer in temp:
-            temp[primer].start = crisprs[cr]['stop'] + 125 + temp[primer].start
+            temp[primer].start = crisprs[cr]['stop'] + inside_buffer + temp[primer].start
             crisprs[cr]['primers'][primer] = copy.deepcopy(temp[primer])
     
     # find the distances between all pairwise combinations of primers
