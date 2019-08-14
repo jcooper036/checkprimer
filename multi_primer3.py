@@ -176,7 +176,6 @@ def blast_primer(seq):
         output = output.split('\t')
         if output[-1]:
             if float(output[-1]) > 36.2:
-                print(float(output[-1]))
                 examine.append(output)
     if len(examine) == 1:
         return True
@@ -188,48 +187,68 @@ def parse_primers(primer3out, side):
     primers = {}
     primer3out = primer3out.split('\n')
     count = 0
+    reset = True
     for line in primer3out:
-        if ("PRIMER_" + side.upper() + "_" + str(count)) in line:
-            if "_PENALTY" in line:
-                pen = line.split('=')[1]
-            if "_SEQUENCE" in line:
-                seq = line.split('=')[1]
-            if "," in line:
-                start = int(line.split('=')[1].split(',')[0])
-                length = line.split('=')[1].split(',')[1]
-            if "GC_PERCENT" in line:
-                gc = line.split('=')[1]
-            if "TM" in line: 
-                tm = line.split('=')[1]
-            if "SELF_ANY" in line:
-                anyTH = line.split('=')[1]
-            if "SELF_END" in line:
-                endTH = line.split('=')[1]
-            if "HAIRPIN" in line:
-                hairpin = line.split('=')[1]
-            if "END_STABILITY" in line:
-                stab = line.split('=')[1]
-                
-                # only save if the primer is more than 10bp away from all others in starting position
-                add = True
-                if primers:
-                    overlapBuffer = 15
-                    starts = [int(primers[pr].start) for pr in primers]
-                    if not all( (start >= x+overlapBuffer) for x in starts) and not all( (start <= x-overlapBuffer) for x in starts):
-                        add = False
+        if reset:
+            pen = None
+            seq = None
+            start = None
+            length = None
+            gc = None
+            tm = None
+            anyTH = None
+            endTH = None
+            hairpin = None
+            stab = None
+            reset = False
+
+        if "PENALTY=" in line:
+            pen = line.split('=')[1]
+        if "SEQUENCE=" in line:
+            seq = line.split('=')[1]
+        if "," in line and 'EXPLAIN' not in line:
+            start = int(line.split('=')[1].split(',')[0])
+            length = line.split('=')[1].split(',')[1]
+        if "GC_PERCENT" in line:
+            gc = line.split('=')[1]
+        if "TM" in line:
+            tm = line.split('=')[1]
+        if "SELF_ANY" in line:
+            anyTH = line.split('=')[1]
+        if "SELF_END" in line:
+            endTH = line.split('=')[1]
+        if "HAIRPIN" in line:
+            hairpin = line.split('=')[1]
+        if "END_STABILITY" in line:
+            stab = line.split('=')[1]
+
+        # only save if the primer is more than 10bp away from all others in starting position
+        if all([pen, seq, start, length, gc, tm, anyTH, endTH, hairpin, stab]):
+            add = True
+            if primers:
+                overlapBuffer = 15
+                starts = [int(primers[pr].start) for pr in primers]
+                if not all( (start >= x+overlapBuffer) for x in starts) and not all( (start <= x-overlapBuffer) for x in starts):
+                    add = False
+            if (float(anyTH)+float(endTH)) > 8:
+                add = False
+            if add:
+                # print('blasting', str(count)) #@
                 if not blast_primer(seq):
                     add = False
-                if (anyTH+endTH) > 8:
-                    add = False
-                if add:
-                    if side == 'left':
-                        FR = 'F'
-                    if side == 'right':
-                        FR = 'R'
-                    primers[FR+str(count)] = Primer(side, pen, seq, start, length, tm, gc, anyTH, endTH, hairpin, stab)
-                    count += 1
+            if add:
+                if side == 'left':
+                    FR = 'F'
+                if side == 'right':
+                    FR = 'R'
+                primers[FR+str(count)] = Primer(side, pen, seq, start, length, tm, gc, anyTH, endTH, hairpin, stab)
+                # for pri in primers:
+                #     print(primers[pri].start)
+                count += 1
+                reset = True
+
         if count == 4:
-            return primers
+            break
     return primers
 
 def pick_primers(template, side, lowTm=60, highTm=65):
@@ -241,6 +260,7 @@ def pick_primers(template, side, lowTm=60, highTm=65):
     # settings variables
     sequence_id = 'blank'
     sequence_template = template
+    # print(template) #@
     task = 'generic'
     if side == 'left':
         pick_left_primer = '1'
@@ -260,10 +280,12 @@ def pick_primers(template, side, lowTm=60, highTm=65):
     min_tm = '59'
     opt_tm = '63'
     max_tm = '67'
-    primer_return_num = '20'
+    primer_return_num = '200'
+
+    # + 'PRIMER_PRODUCT_SIZE_RANGE=' + product_size_range + '\n'
 
     # string concat for settings
-    primer3_settings = 'SEQUENCE_ID=' + sequence_id + '\n' + 'SEQUENCE_TEMPLATE=' + sequence_template + '\n' + 'PRIMER_TASK=' + task + '\n' + 'PRIMER_PICK_LEFT_PRIMER=' + pick_left_primer + '\n' + 'PRIMER_PICK_INTERNAL_OLIGO=' + pick_internal_oligo + '\n' + 'PRIMER_PICK_RIGHT_PRIMER=' + pick_right_primer + '\n' + 'PRIMER_OPT_SIZE=' + opt_size + '\n' + 'PRIMER_MIN_SIZE=' + min_size + '\n' + 'PRIMER_MAX_SIZE=' + max_size + '\n' + 'PRIMER_PRODUCT_SIZE_RANGE=' + product_size_range + '\n' + 'PRIMER_EXPLAIN_FLAG=' + explain_flag + '\n' + 'PRIMER_INTERNAL_MIN_TM=' + min_tm + '\n' + 'PRIMER_INTERNAL_OPT_TM=' + opt_tm + '\n' + 'PRIMER_INTERNAL_MAX_TM=' + max_tm + '\n' + 'PRIMER_INTER_MIN_GC=' + min_gc + '\n' + 'PRIMER_INTERNAL_MAX_GC=' + max_gc + '\n' + 'PRIMER_NUM_RETURN=' + primer_return_num + '\n='
+    primer3_settings = 'SEQUENCE_ID=' + sequence_id + '\n' + 'SEQUENCE_TEMPLATE=' + sequence_template + '\n' + 'PRIMER_TASK=' + task + '\n' + 'PRIMER_PICK_LEFT_PRIMER=' + pick_left_primer + '\n' + 'PRIMER_PICK_INTERNAL_OLIGO=' + pick_internal_oligo + '\n' + 'PRIMER_PICK_RIGHT_PRIMER=' + pick_right_primer + '\n' + 'PRIMER_OPT_SIZE=' + opt_size + '\n' + 'PRIMER_MIN_SIZE=' + min_size + '\n' + 'PRIMER_MAX_SIZE=' + max_size + '\n'  + 'PRIMER_EXPLAIN_FLAG=' + explain_flag + '\n' + 'PRIMER_INTERNAL_MIN_TM=' + min_tm + '\n' + 'PRIMER_INTERNAL_OPT_TM=' + opt_tm + '\n' + 'PRIMER_INTERNAL_MAX_TM=' + max_tm + '\n' + 'PRIMER_INTER_MIN_GC=' + min_gc + '\n' + 'PRIMER_INTERNAL_MAX_GC=' + max_gc + '\n' + 'PRIMER_NUM_RETURN=' + primer_return_num + '\n='
 
     # test for primer3
     return parse_primers(run_primer3(primer3_settings), side)
