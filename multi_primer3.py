@@ -175,7 +175,8 @@ def blast_primer(seq):
     for output in out:
         output = output.split('\t')
         if output[-1]:
-            if float(output[-1]) > 34.2:
+            if float(output[-1]) > 36.2:
+                print(float(output[-1]))
                 examine.append(output)
     if len(examine) == 1:
         return True
@@ -212,10 +213,13 @@ def parse_primers(primer3out, side):
                 # only save if the primer is more than 10bp away from all others in starting position
                 add = True
                 if primers:
+                    overlapBuffer = 15
                     starts = [int(primers[pr].start) for pr in primers]
-                    if not all( (start > x+25) for x in starts) and not all( (start < x-25) for x in starts):
+                    if not all( (start >= x+overlapBuffer) for x in starts) and not all( (start <= x-overlapBuffer) for x in starts):
                         add = False
                 if not blast_primer(seq):
+                    add = False
+                if (anyTH+endTH) > 8:
                     add = False
                 if add:
                     if side == 'left':
@@ -254,9 +258,9 @@ def pick_primers(template, side, lowTm=60, highTm=65):
     min_gc = '35'
     max_gc = '75'
     min_tm = '59'
-    opt_tm = '60'
-    max_tm = '63'
-    primer_return_num = '15'
+    opt_tm = '63'
+    max_tm = '67'
+    primer_return_num = '20'
 
     # string concat for settings
     primer3_settings = 'SEQUENCE_ID=' + sequence_id + '\n' + 'SEQUENCE_TEMPLATE=' + sequence_template + '\n' + 'PRIMER_TASK=' + task + '\n' + 'PRIMER_PICK_LEFT_PRIMER=' + pick_left_primer + '\n' + 'PRIMER_PICK_INTERNAL_OLIGO=' + pick_internal_oligo + '\n' + 'PRIMER_PICK_RIGHT_PRIMER=' + pick_right_primer + '\n' + 'PRIMER_OPT_SIZE=' + opt_size + '\n' + 'PRIMER_MIN_SIZE=' + min_size + '\n' + 'PRIMER_MAX_SIZE=' + max_size + '\n' + 'PRIMER_PRODUCT_SIZE_RANGE=' + product_size_range + '\n' + 'PRIMER_EXPLAIN_FLAG=' + explain_flag + '\n' + 'PRIMER_INTERNAL_MIN_TM=' + min_tm + '\n' + 'PRIMER_INTERNAL_OPT_TM=' + opt_tm + '\n' + 'PRIMER_INTERNAL_MAX_TM=' + max_tm + '\n' + 'PRIMER_INTER_MIN_GC=' + min_gc + '\n' + 'PRIMER_INTERNAL_MAX_GC=' + max_gc + '\n' + 'PRIMER_NUM_RETURN=' + primer_return_num + '\n='
@@ -318,11 +322,11 @@ for cr in crisprs:
 
     # left primers
     # first if there is pleantly of room
-    end_buffer = 600
-    inside_buffer = 125
+    end_buffer = 700
+    inside_buffer = 50
     if (crisprs[cr]['start'] - end_buffer) > 0:
         
-        # template is -400 - -50 from crispr start site
+        # template is -end_buffer - -inside_buffer from crispr start site
         template = seq[crisprs[cr]['start']-end_buffer:crisprs[cr]['start']-inside_buffer]
         temp = pick_primers(template, 'left')
         for primer in temp:
@@ -333,7 +337,7 @@ for cr in crisprs:
     # first if there is pleantly of room
     if (crisprs[cr]['stop'] + end_buffer) < len(seq):
         
-         # template is +50 to +400 from crispr start site
+         # template is +inside_buffer to +end_buffer from crispr start site
         template = seq[crisprs[cr]['stop']+inside_buffer:crisprs[cr]['stop']+end_buffer]
         temp = pick_primers(template, 'right')
         for primer in temp:
