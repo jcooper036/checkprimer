@@ -55,16 +55,6 @@ def combine_csvs(csvs):
             master_list.append(ele)
     return master_list
 
-def write_csv(csvlist, file, header=False):
-    with open(file, 'w') as f:
-        if header:
-            f.write(','.join(header))
-            f.write('\n')
-        for ele in csvlist:
-            if ele:
-                f.write(','.join(ele))
-                f.write('\n')
-
 # ID the folder
 folder = sys.argv[1]
 

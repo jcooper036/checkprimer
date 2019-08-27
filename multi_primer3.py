@@ -168,7 +168,7 @@ def blast_primer(seq):
         print("UPDATE: making BLAST database for " + genome)
         command = 'makeblastdb -in ' + genome + ' -parse_seqids -dbtype nucl'
         bash(command)
-    command = 'blastn -task blastn-short -outfmt "6" -query <(echo ' + seq + ') -db ' + genome
+    command = 'blastn -task blastn-short -outfmt "6" -query <(echo ' + seq + ') -db ' + genome + ' | sort -k12 -n -r'
     out = str(bash(command)).split('\n')
     # see if there are hits greater than bit score of 34.2 (its the last entry in outfmt 6)
     examine = []
@@ -187,6 +187,7 @@ def parse_primers(primer3out, side):
     primers = {}
     primer3out = primer3out.split('\n')
     count = 0
+    blastCount = 0
     reset = True
     for line in primer3out:
         if reset:
@@ -226,28 +227,29 @@ def parse_primers(primer3out, side):
         if all([pen, seq, start, length, gc, tm, anyTH, endTH, hairpin, stab]):
             add = True
             if primers:
-                overlapBuffer = 15
+                overlapBuffer = 25
                 starts = [int(primers[pr].start) for pr in primers]
                 if not all( (start >= x+overlapBuffer) for x in starts) and not all( (start <= x-overlapBuffer) for x in starts):
                     add = False
             if (float(anyTH)+float(endTH)) > 8:
                 add = False
-            if add:
+            if add and blastCount < 21:
                 # print('blasting', str(count)) #@
                 if not blast_primer(seq):
                     add = False
+                blastCount += 1
             if add:
                 if side == 'left':
                     FR = 'F'
                 if side == 'right':
                     FR = 'R'
-                primers[FR+str(count)] = Primer(side, pen, seq, start, length, tm, gc, anyTH, endTH, hairpin, stab)
+                primers[FR+str(count+1)] = Primer(side, pen, seq, start, length, tm, gc, anyTH, endTH, hairpin, stab)
                 # for pri in primers:
                 #     print(primers[pri].start)
                 count += 1
                 reset = True
 
-        if count == 4:
+        if count == 2:
             break
     return primers
 
@@ -344,8 +346,8 @@ for cr in crisprs:
 
     # left primers
     # first if there is pleantly of room
-    end_buffer = 700
-    inside_buffer = 50
+    end_buffer = 800
+    inside_buffer = 150
     if (crisprs[cr]['start'] - end_buffer) > 0:
         
         # template is -end_buffer - -inside_buffer from crispr start site
@@ -354,7 +356,17 @@ for cr in crisprs:
         for primer in temp:
             temp[primer].start = crisprs[cr]['start'] - inside_buffer - temp[primer].start
             crisprs[cr]['primers'][primer] = copy.deepcopy(temp[primer])
-
+    
+    ## make sure one of the left primers is close enough for sequencing
+    check = False
+    for primer in crisprs[cr]['primers']:
+        p_start = crisprs[cr]['primers'][primer].start
+        c_start = crisprs[cr]['start']
+        if abs(p_start-c_start) < 500:
+            check = True
+    if not check:    
+        end_buffer = 499
+        
     # right primers
     # first if there is pleantly of room
     if (crisprs[cr]['stop'] + end_buffer) < len(seq):
