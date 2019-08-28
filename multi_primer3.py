@@ -168,9 +168,9 @@ def blast_primer(seq):
         print("UPDATE: making BLAST database for " + genome)
         command = 'makeblastdb -in ' + genome + ' -parse_seqids -dbtype nucl'
         bash(command)
-    command = 'blastn -task blastn-short -outfmt "6" -query <(echo ' + seq + ') -db ' + genome + ' | sort -k12 -n -r'
+    command = 'blastn -task blastn-short -outfmt "6" -query <(echo ' + seq + ') -db ' + genome + ' | sort -k12 -n -r | head -5'
     out = str(bash(command)).split('\n')
-    # see if there are hits greater than bit score of 34.2 (its the last entry in outfmt 6)
+    # see if there are hits greater than bit score of 36.2 (its the last entry in outfmt 6)
     examine = []
     for output in out:
         output = output.split('\t')
@@ -187,8 +187,11 @@ def parse_primers(primer3out, side):
     primers = {}
     primer3out = primer3out.split('\n')
     count = 0
+    max_blast = 8
     blastCount = 0
+    tried_sequences = []
     reset = True
+    print('Looking for {} primers'.format(side))
     for line in primer3out:
         if reset:
             pen = None
@@ -201,6 +204,7 @@ def parse_primers(primer3out, side):
             endTH = None
             hairpin = None
             stab = None
+            blastCount = 0
             reset = False
 
         if "PENALTY=" in line:
@@ -226,28 +230,39 @@ def parse_primers(primer3out, side):
         # only save if the primer is more than 10bp away from all others in starting position
         if all([pen, seq, start, length, gc, tm, anyTH, endTH, hairpin, stab]):
             add = True
+            
             if primers:
                 overlapBuffer = 25
                 starts = [int(primers[pr].start) for pr in primers]
                 if not all( (start >= x+overlapBuffer) for x in starts) and not all( (start <= x-overlapBuffer) for x in starts):
                     add = False
+            
+            # make sure we haven't tried it before
+            if add:
+                if seq in tried_sequences:
+                    add = False
+
             if (float(anyTH)+float(endTH)) > 8:
                 add = False
-            if add and blastCount < 21:
-                # print('blasting', str(count)) #@
-                if not blast_primer(seq):
-                    add = False
-                blastCount += 1
+            if add:
+                if blastCount < max_blast:
+                    print('Blasting {}, try {} / {}'.format(seq, blastCount+1, max_blast))
+                    if not blast_primer(seq):
+                        add = False
+                    blastCount += 1
+                else:
+                    return primers
             if add:
                 if side == 'left':
                     FR = 'F'
                 if side == 'right':
                     FR = 'R'
                 primers[FR+str(count+1)] = Primer(side, pen, seq, start, length, tm, gc, anyTH, endTH, hairpin, stab)
-                # for pri in primers:
-                #     print(primers[pri].start)
                 count += 1
                 reset = True
+            # add it to the list of tried sequences REGUARDLESS
+            tried_sequences.append(seq)
+
 
         if count == 2:
             break
@@ -336,8 +351,14 @@ for entry in fasta:
     else:
         seq = fasta[entry]
 
+# terminal output for clarity
+print('\n\n######################\nFinding primers for the CRISPR sites in {}'.format(gene))
+
 # loop over each CRISPR molecule
 for cr in crisprs:
+
+    # terminal output for clarity
+    print('\nLooking for primers for {}'.format(cr))
 
     # find the start and stop positions
     crisprs[cr]['start'], crisprs[cr]['stop'] = find_match(seq, crisprs[cr]['seq'])
@@ -377,11 +398,6 @@ for cr in crisprs:
         for primer in temp:
             temp[primer].start = crisprs[cr]['stop'] + inside_buffer + temp[primer].start
             crisprs[cr]['primers'][primer] = copy.deepcopy(temp[primer])
-    
-    # find the distances between all pairwise combinations of primers
-
-    # name the primers correctly
-
 
     # write to the terminal
     print(crisprs[cr]['name'])
@@ -390,7 +406,6 @@ for cr in crisprs:
         primer_seq = crisprs[cr]['primers'][primer].seq
         start = crisprs[cr]['primers'][primer].start
         print(name, primer_seq, start)
-    print('\n')
 
 # output the seqeunces to a csv in the current directory
 file = infile.split('.fasta')[0] + "_autoprimer_output.csv"
