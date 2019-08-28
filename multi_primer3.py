@@ -232,7 +232,7 @@ def parse_primers(primer3out, side):
             add = True
             
             if primers:
-                overlapBuffer = 25
+                overlapBuffer = 45
                 starts = [int(primers[pr].start) for pr in primers]
                 if not all( (start >= x+overlapBuffer) for x in starts) and not all( (start <= x-overlapBuffer) for x in starts):
                     add = False
