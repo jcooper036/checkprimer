@@ -232,7 +232,7 @@ def parse_primers(primer3out, side):
             add = True
             
             if primers:
-                overlapBuffer = 45
+                overlapBuffer = 25
                 starts = [int(primers[pr].start) for pr in primers]
                 if not all( (start >= x+overlapBuffer) for x in starts) and not all( (start <= x-overlapBuffer) for x in starts):
                     add = False
@@ -367,7 +367,7 @@ for cr in crisprs:
 
     # left primers
     # first if there is pleantly of room
-    end_buffer = 800
+    end_buffer = 700
     inside_buffer = 150
     if (crisprs[cr]['start'] - end_buffer) > 0:
         
