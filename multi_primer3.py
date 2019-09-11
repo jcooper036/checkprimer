@@ -31,6 +31,11 @@ PRIMER_EXPLAIN_FLAG=1
 """
 Ideally we organize the information so it can be streamed into primer3
 """
+GENOME = '/Volumes/i_bio/Crispr_F0_Screens/checkprimer/genome/GRCh38_latest_genomic.fasta'
+GENOME = '/Users/jacob.cooper/resources/genomes/GRCh38_latest_genomic.fasta'
+PRIMER_PER_SIDE = 4
+END_BUFFER = 700
+INSIDE_BUFFER = 150
 
 import subprocess
 import sys
@@ -163,12 +168,12 @@ def blast_primer(seq):
     Input: primer sequence
     Returns True if primer is unique, false if the primer is not.
     """
-    genome = '/Volumes/i_bio/Crispr_F0_Screens/checkprimer/genome/GRCh38_latest_genomic.fasta'
-    if not os.path.exists(genome + '.nhr'):
-        print("UPDATE: making BLAST database for " + genome)
-        command = 'makeblastdb -in ' + genome + ' -parse_seqids -dbtype nucl'
+    global GENOME
+    if not os.path.exists(GENOME + '.nhr'):
+        print("UPDATE: making BLAST database for " + GENOME)
+        command = 'makeblastdb -in ' + GENOME + ' -parse_seqids -dbtype nucl'
         bash(command)
-    command = 'blastn -task blastn-short -outfmt "6" -query <(echo ' + seq + ') -db ' + genome + ' | sort -k12 -n -r | head -5'
+    command = 'blastn -task blastn-short -outfmt "6" -query <(echo ' + seq + ') -db ' + GENOME + ' | sort -k12 -n -r | head -5'
     out = str(bash(command)).split('\n')
     # see if there are hits greater than bit score of 36.2 (its the last entry in outfmt 6)
     examine = []
@@ -186,6 +191,7 @@ def blast_primer(seq):
 def parse_primers(primer3out, side):
     primers = {}
     primer3out = primer3out.split('\n')
+    global PRIMER_PER_SIDE
     count = 0
     max_blast = 8
     blastCount = 0
@@ -212,6 +218,7 @@ def parse_primers(primer3out, side):
         if "SEQUENCE=" in line:
             seq = line.split('=')[1]
         if "," in line and 'EXPLAIN' not in line:
+            # print(line)
             start = int(line.split('=')[1].split(',')[0])
             length = line.split('=')[1].split(',')[1]
         if "GC_PERCENT" in line:
@@ -234,8 +241,11 @@ def parse_primers(primer3out, side):
             if primers:
                 overlapBuffer = 25
                 starts = [int(primers[pr].start) for pr in primers]
-                if not all( (start >= x+overlapBuffer) for x in starts) and not all( (start <= x-overlapBuffer) for x in starts):
-                    add = False
+                for s in starts:
+                    if not (start >= s+overlapBuffer):
+                        if not (start <= s-overlapBuffer):
+                            # print('crowd catch')
+                            add = False
             
             # make sure we haven't tried it before
             if add:
@@ -263,8 +273,7 @@ def parse_primers(primer3out, side):
             # add it to the list of tried sequences REGUARDLESS
             tried_sequences.append(seq)
 
-
-        if count == 2:
+        if count == PRIMER_PER_SIDE:
             break
     return primers
 
@@ -367,8 +376,8 @@ for cr in crisprs:
 
     # left primers
     # first if there is pleantly of room
-    end_buffer = 700
-    inside_buffer = 150
+    end_buffer = copy.deepcopy(END_BUFFER)
+    inside_buffer = copy.deepcopy(INSIDE_BUFFER)
     if (crisprs[cr]['start'] - end_buffer) > 0:
         
         # template is -end_buffer - -inside_buffer from crispr start site
