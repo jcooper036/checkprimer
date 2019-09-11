@@ -32,7 +32,7 @@ PRIMER_EXPLAIN_FLAG=1
 Ideally we organize the information so it can be streamed into primer3
 """
 GENOME = '/Volumes/i_bio/Crispr_F0_Screens/checkprimer/genome/GRCh38_latest_genomic.fasta'
-GENOME = '/Users/jacob.cooper/resources/genomes/GRCh38_latest_genomic.fasta'
+# GENOME = '/Users/jacob.cooper/resources/genomes/GRCh38_latest_genomic.fasta'
 PRIMER_PER_SIDE = 4
 END_BUFFER = 700
 INSIDE_BUFFER = 150
